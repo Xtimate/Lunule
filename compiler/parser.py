@@ -1,5 +1,5 @@
 from errors import LangError
-from nodes import Num, Str, Var, BinOp, Let, Assign, Print, If, While
+from nodes import Num, Str, Var, BinOp, Let, Assign, Print, If, While, Call, FuncDef, Return, ExprStmt, Borrow
 
 CMP_OPS = ("<", ">", "<=", ">=", "==", "!=")
 
@@ -60,6 +60,9 @@ class Parser:
                 return Let(name.text, self.expr(), name.line)
             case "ID":
                 name = self.advance()
+                if self.peek().kind == "(":
+                    call = Call(name.text, self.args(), name.line, name.col)
+                    return ExprStmt(call)
                 self.expect("=")
                 return Assign(name.text, self.expr(), name.line, name.col)
             case "print":
@@ -74,8 +77,23 @@ class Parser:
                 self.advance()
                 cond = self.expr()
                 return While(cond, self.block())
+            case "fn":
+                return self.func_def()
+            case "return":
+                self.advance()
+                value = None
+                if self.peek().kind not in ("NEWLINE", "EOF", "}"):
+                    value = self.expr()
+                return Return(value, tok.line, tok.col)
             case _:
                 raise LangError(f"expected a statement but found {describe(tok)}", tok.line, tok.col)
+
+    def arg(self):
+        if self.peek().kind == "&":
+            amp = self.advance()
+            name = self.expect("ID")
+            return Borrow(name.text, amp.line, amp.col)
+        return self.expr()
 
     def if_stmt(self):
         self.advance()
@@ -89,6 +107,36 @@ class Parser:
             else:
                 els = self.block()
         return If(cond, then, els)
+
+    def func_def(self):
+        self.advance()
+        name = self.expect("ID")
+        self.expect("(")
+        params = []
+        if self.peek().kind != ")":
+            params.append(self.expect("ID"))
+            while self.peek().kind == ",":
+                self.advance()
+                params.append(self.expect("ID"))
+        self.expect(")")
+        seen = set()
+        for p in params:
+            if p.text in seen:
+                raise LangError(f"duplicate parameter '{p.text}'", p.line, p.col)
+            seen.add(p.text)
+            body = self.block()
+            return FuncDef(name.text, [p.text for p in params], body, name.line, name.col)
+
+    def args(self):
+        self.expect("(")
+        args = []
+        if self.peek().kind != ")":
+            args.append(self.arg())
+            while self.peek().kind == ",":
+                self.advance()
+                args.append(self.arg())
+        self.expect(")")
+        return args
 
     def expr(self):
         node = self.arith()
@@ -122,11 +170,16 @@ class Parser:
                 return Str(tok.text[1:-1])
             case "ID":
                 self.advance()
+                if self.peek().kind == "(":
+                    return Call(tok.text, self.args(), tok.line, tok.col)
                 return Var(tok.text, tok.line, tok.col)
             case "(":
                 self.advance()
                 node = self.expr()
                 self.expect(")")
                 return node
+            case "&":
+                raise LangError("a borrow '&' can only be passed directly as a function argument",
+                                tok.line, tok.col)
             case _:
                 raise LangError(f"expected a value but found {describe(tok)}", tok.line, tok.col)

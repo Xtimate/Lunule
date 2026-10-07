@@ -5,6 +5,7 @@ typedef enum { T_INT, T_STR, T_MOVED } Tag;
 
 typedef struct {
     Tag tag;
+    int borrowed;
     union { long i; char *s; } as;
 } Value;
 
@@ -12,6 +13,7 @@ Value rt_int(long n);
 Value rt_str(const char *s);
 Value rt_use(const Value *v, const char *name);
 Value rt_move(Value *v, const char *name);
+Value rt_borrow(const Value *v, const char *name);
 void  rt_drop(Value *v);
 Value rt_add(Value a, Value b);
 Value rt_sub(Value a, Value b);

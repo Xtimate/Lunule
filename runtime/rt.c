@@ -16,6 +16,7 @@ static void panic_moved(const char *name) {
 Value rt_int(long n) {
     Value v;
     v.tag = T_INT;
+    v.borrowed = 0;
     v.as.i = n;
     return v;
 }
@@ -27,6 +28,7 @@ Value rt_str(const char *s) {
     memcpy(copy, s, len + 1);
     Value v;
     v.tag = T_STR;
+    v.borrowed = 0;
     v.as.s = copy;
     return v;
 }
@@ -40,14 +42,25 @@ Value rt_use(const Value *v, const char *name) {
 /* Move: take ownership. Strings leave the source dead; ints are copied. */
 Value rt_move(Value *v, const char *name) {
     if (v->tag == T_MOVED) panic_moved(name);
+    if (v->tag == T_STR && v->borrowed) {
+        fprintf(stderr, "runtime error: cannot move borrowed value '%s'\n", name);
+        exit(1);
+    }
     Value out = *v;
     if (v->tag == T_STR) v->tag = T_MOVED;
     return out;
 }
 
+Value rt_borrow(const Value *v, const char *name) {
+    if (v->tag == T_MOVED) panic_moved(name);
+    Value out = *v;
+    if (out.tag == T_STR) out.borrowed = 1;
+    return out;
+}
+
 /* Free what the value owns, and mark it dead so a second drop does nothing. */
 void rt_drop(Value *v) {
-    if (v->tag == T_STR) free(v->as.s);
+    if (v->tag == T_STR && !v->borrowed) free(v->as.s);
     v->tag = T_MOVED;
 }
 

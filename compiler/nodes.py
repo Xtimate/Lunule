@@ -47,3 +47,34 @@ class If:
 class While:
     cond: object
     body: list
+
+@dataclass
+class Call:
+    name: str
+    args: list
+    line: int
+    col: int
+
+@dataclass
+class FuncDef:
+    name: str
+    params: list
+    body: list
+    line: int
+    col: int
+
+@dataclass
+class Return:
+    value: object
+    line: int
+    col: int
+
+@dataclass
+class ExprStmt:
+    value: object
+
+@dataclass
+class Borrow:
+    name: str
+    line: int
+    col: int

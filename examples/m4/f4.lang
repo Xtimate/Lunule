@@ -1,0 +1,6 @@
+fn greet(name) {
+    print(name)
+}
+let s = "hi"
+greet(s)
+print(s)

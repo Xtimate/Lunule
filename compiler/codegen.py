@@ -1,5 +1,5 @@
 from errors import LangError
-from nodes import Num, Str, Var, BinOp, Let, Assign, Print, If, While
+from nodes import Num, Str, Var, BinOp, Let, Assign, Print, If, While, Call, FuncDef, Return, ExprStmt, Borrow
 
 RT_FUNCS = {
     "+": "rt_add", "-": "rt_sub", "*": "rt_mul", "/": "rt_div",
@@ -16,6 +16,8 @@ class CodeGen:
         self.lines = []
         self.indent = 0
         self.counter = 0
+        self.funcs = {}
+        self.in_function = False
 
     def emit(self, text):
         self.lines.append("    " * self.indent + text)
@@ -39,6 +41,12 @@ class CodeGen:
     def move(self, node):
         return f'rt_move(&{self.lookup(node)}, "{node.name}")'
 
+    def borrow(self, node):
+        return f'rt_borrow(&{self.lookup(node)}, "{node.name}")'
+
+    def arg_code(self, node):
+        return self.borrow(node) if isinstance(node, Borrow) else self.value_of(node)
+
     def value_of(self, node):
         return self.move(node) if isinstance(node, Var) else self.expr(node)
 
@@ -52,6 +60,16 @@ class CodeGen:
                 return self.use(node)
             case BinOp(op=op, left=left, right=right):
                 return f"{RT_FUNCS[op]}({self.expr(left)}, {self.expr(right)})"
+            case Call(name=name, args=args, line=line, col=col):
+                if name not in self.funcs:
+                    raise LangError(f"undefined function '{name}'", line, col)
+                n = self.funcs[name]
+                if len(args) != n:
+                    raise LangError(
+                        f"function '{name}' takes {n} argument(s) but {len(args)} given", line, col
+                    )
+                arg_list = ", ".join(self.arg_code(a) for a in args)
+                return f"f_{name}({arg_list})"
             case _:
                 raise AssertionError(f"unknown expression node {node}")
 
@@ -91,12 +109,70 @@ class CodeGen:
                 self.emit(f"while (rt_truthy({self.expr(cond)})) {{")
                 self.body(body)
                 self.emit("}")
+            case ExprStmt(value=value):
+                self.emit(f"{{ Value t = {self.expr(value)}; rt_drop(&t); }}")
+            case Return(value=value, line=line, col=col):
+                if not self.in_function:
+                    raise LangError("'return' outside of a function", line, col)
+                code = "rt_int(0)" if value is None else self.value_of(value)
+                self.emit("{")
+                self.indent += 1
+                self.emit(f"Value ret = {code};")
+                for scope in reversed(self.scopes):
+                    for cname in reversed(scope["owned"]):
+                        self.emit(f"rt_drop(&{cname});")
+                self.emit("return ret;")
+                self.indent -= 1
+                self.emit("}")
+            case FuncDef(line=line, col=col):
+                raise LangError("functions can only be defined at the top level", line, col)
             case _:
                 raise AssertionError(f"unknown statement node {node}")
 
+    def function(self, fn):
+        saved_lines, saved_scopes = self.lines, self.scopes
+        self.lines = []
+        self.scopes = [{"names": {}, "owned": []}]
+        self.in_function = True
+        params = [self.declare(p) for p in fn.params]
+        self.indent = 1
+        for s in fn.body:
+            self.stmt(s)
+        scope = self.scopes.pop()
+        for cname in reversed(scope["owned"]):
+            self.emit(f"rt_drop(&{cname});")
+        self.emit("return rt_int(0);")
+        self.indent = 0
+        param_list = ", ".join(f"Value {p}" for p in params) or "void"
+        sig = f"Value f_{fn.name}({param_list})"
+        text = sig + " {\n" + "\n".join(self.lines) + "\n}\n"
+        self.lines, self.scopes = saved_lines, saved_scopes
+        self.in_function = False
+        return sig, text
+
 def generate(program):
     gen = CodeGen()
-    gen.body(program)
+    funcs = [s for s in program if isinstance(s, FuncDef)]
+    rest = [s for s in program if not isinstance(s, FuncDef)]
+
+    for fn in funcs:
+        if fn.name in gen.funcs:
+            raise LangError(f"function '{fn.name}' is already defined", fn.line, fn.col)
+        gen.funcs[fn.name] = len(fn.params)
+
+    protos, defs = [], []
+    for fn in funcs:
+        sig, text = gen.function(fn)
+        protos.append(sig + ";")
+        defs.append(text)
+
+    gen.body(rest)
     body = "\n".join(gen.lines)
-    header = '#include "rt.h"'
-    return header + "\n\nint main(void) {\n" + body + "\n    return 0;\n}\n"
+
+    out = '#include "rt.h"\n\n'
+    if protos:
+        out += "\n".join(protos) + "\n\n"
+    for d in defs:
+        out += d + "\n"
+    out += "int main(void) {\n" + body + "\n    return 0;\n}\n"
+    return out
