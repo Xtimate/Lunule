@@ -2,11 +2,29 @@ from errors import LangError
 from nodes import Num, Str, Var, BinOp, Let, Assign, Print, If, While, Call, FuncDef, Return, ExprStmt, Borrow
 
 CMP_OPS = ("<", ">", "<=", ">=", "==", "!=")
+ESCAPES = {"n": "\n", "t": "\t", "\\": "\\", '"': '"'}
 
 def describe(tok):
     if tok.kind == "EOF":     return "end of file"
     if tok.kind == "NEWLINE": return "end of line"
     return repr(tok.text)
+
+def unescape(tok):
+    body = tok.text[1:-1]
+    out = []
+    i = 0
+    while i < len(body):
+        ch = body[i]
+        if ch == "\\":
+            nxt = body[i + 1]
+            if nxt not in ESCAPES:
+                raise LangError(f"unknown escape '\\{nxt}'", tok.line, tok.col)
+            out.append(ESCAPES[nxt])
+            i += 2
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
 
 class Parser:
     def __init__(self, tokens):
@@ -167,7 +185,7 @@ class Parser:
                 return Num(int(tok.text))
             case "STR":
                 self.advance()
-                return Str(tok.text[1:-1])
+                return Str(unescape(tok))
             case "ID":
                 self.advance()
                 if self.peek().kind == "(":

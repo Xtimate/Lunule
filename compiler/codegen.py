@@ -7,8 +7,12 @@ RT_FUNCS = {
     "==": "rt_eq", "!=": "rt_ne",
 }
 
+BUILTINS = {"open": 2, "read": 1, "write": 2, "close": 1}
+
+C_ESC = {"\\": "\\\\", '"': '\\"', "\n": "\\n", "\t": "\\t"}
+
 def c_string(s):
-    return '"' + s.replace("\\", "\\\\") + '"'
+    return '"' + "".join(C_ESC.get(ch, ch) for ch in s) + '"';
 
 class CodeGen:
     def __init__(self):
@@ -61,15 +65,18 @@ class CodeGen:
             case BinOp(op=op, left=left, right=right):
                 return f"{RT_FUNCS[op]}({self.expr(left)}, {self.expr(right)})"
             case Call(name=name, args=args, line=line, col=col):
-                if name not in self.funcs:
+                if name in self.funcs:
+                    target, n = f"f_{name}", self.funcs[name]
+                elif name in BUILTINS:
+                    target, n = f"rt_{name}", BUILTINS[name]
+                else:
                     raise LangError(f"undefined function '{name}'", line, col)
-                n = self.funcs[name]
                 if len(args) != n:
                     raise LangError(
                         f"function '{name}' takes {n} argument(s) but {len(args)} given", line, col
                     )
                 arg_list = ", ".join(self.arg_code(a) for a in args)
-                return f"f_{name}({arg_list})"
+                return f"{target}({arg_list})"
             case _:
                 raise AssertionError(f"unknown expression node {node}")
 
@@ -156,6 +163,8 @@ def generate(program):
     rest = [s for s in program if not isinstance(s, FuncDef)]
 
     for fn in funcs:
+        if fn.name in BUILTINS:
+            raise LangError(f"'{fn.name}' is a built-in function and can't be redifined", fn.line, fn.col)
         if fn.name in gen.funcs:
             raise LangError(f"function '{fn.name}' is already defined", fn.line, fn.col)
         gen.funcs[fn.name] = len(fn.params)

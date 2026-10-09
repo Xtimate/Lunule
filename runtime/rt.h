@@ -1,12 +1,14 @@
 #ifndef RT_H
 #define RT_H
 
-typedef enum { T_INT, T_STR, T_MOVED } Tag;
+#include <stdio.h>
+
+typedef enum { T_INT, T_STR, T_FILE, T_MOVED } Tag;
 
 typedef struct {
     Tag tag;
     int borrowed;
-    union { long i; char *s; } as;
+    union { long i; char *s; FILE *f; } as;
 } Value;
 
 Value rt_int(long n);
@@ -25,6 +27,10 @@ Value rt_le(Value a, Value b);
 Value rt_ge(Value a, Value b);
 Value rt_eq(Value a, Value b);
 Value rt_ne(Value a, Value b);
+Value rt_open(Value path, Value mode);
+Value rt_read(Value f);
+Value rt_write(Value f, Value s);
+Value rt_close(Value f);
 int   rt_truthy(Value v);
 void  rt_print(Value v);
 void  rt_panic(const char *msg);

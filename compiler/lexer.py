@@ -13,7 +13,7 @@ KEYWORDS = {"let", "print", "if", "else", "while", "fn", "return"}
 
 TOKEN_SPEC = [
     ("COMMENT",  r"#[^\n]*"),
-    ("STR",      r'"[^"\n]*"'),
+    ("STR",      r'"(?:[^"\\\n]|\\.)*"'),
     ("NUM",      r"\d+"),
     ("ID",       r"[A-Za-z_]\w*"),
     ("OP",       r"==|!=|<=|>=|[+\-*/=()<>{},&]"),

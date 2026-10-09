@@ -1,0 +1,9 @@
+close(open("build/loop.txt", "w"))
+let n = 0
+while n < 3 {
+    let f = open("build/loop.txt", "a")
+    write(&f, "line\n")
+    n = n + 1
+}
+let r = open("build/loop.txt", "r")
+print(read(r))

@@ -1,0 +1,2 @@
+let f = open("build/y.txt", "w")
+close(&f)
