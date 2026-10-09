@@ -7,7 +7,7 @@ RT_FUNCS = {
     "==": "rt_eq", "!=": "rt_ne",
 }
 
-BUILTINS = {"open": 2, "read": 1, "write": 2, "close": 1}
+BUILTINS = {"open": 2, "read": 1, "write": 2, "close": 1, "len": 1, "trim": 1, "tostr": 1}
 
 C_ESC = {"\\": "\\\\", '"': '\\"', "\n": "\\n", "\t": "\\t"}
 
@@ -48,6 +48,9 @@ class CodeGen:
     def borrow(self, node):
         return f'rt_borrow(&{self.lookup(node)}, "{node.name}")'
 
+    def operand(self, node):
+        return self.borrow(node) if isinstance(node, Var) else self.expr(node)
+
     def arg_code(self, node):
         return self.borrow(node) if isinstance(node, Borrow) else self.value_of(node)
 
@@ -63,7 +66,7 @@ class CodeGen:
             case Var():
                 return self.use(node)
             case BinOp(op=op, left=left, right=right):
-                return f"{RT_FUNCS[op]}({self.expr(left)}, {self.expr(right)})"
+                return f"{RT_FUNCS[op]}({self.operand(left)}, {self.operand(right)})"
             case Call(name=name, args=args, line=line, col=col):
                 if name in self.funcs:
                     target, n = f"f_{name}", self.funcs[name]

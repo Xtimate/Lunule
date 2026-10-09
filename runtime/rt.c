@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <ctype.h>
 #include "rt.h"
 
 static int owns_heap(Tag t) { return t == T_STR || t == T_FILE; }
@@ -72,6 +73,20 @@ void rt_drop(Value *v) {
 
 Value rt_add(Value a, Value b) {
     if (a.tag == T_INT && b.tag == T_INT) return rt_int(a.as.i + b.as.i);
+    if (a.tag == T_STR && b.tag == T_STR) {
+        size_t la = strlen(a.as.s), lb = strlen(b.as.s);
+        char *buf = malloc(la + lb + 1);
+        if (!buf) rt_panic("out of memory");
+        memcpy(buf, a.as.s, la);
+        memcpy(buf + la, b.as.s, lb + 1);
+        rt_drop(&a);
+        rt_drop(&b);
+        Value v;
+        v.tag = T_STR;
+        v.borrowed = 0;
+        v.as.s = buf;
+        return v;
+    }
     rt_panic("cannot add these types");
     return rt_int(0);
 }
@@ -101,6 +116,12 @@ Value rt_div(Value a, Value b) {
     Value NAME(Value a, Value b) {                            \
         if (a.tag == T_INT && b.tag == T_INT)                 \
             return rt_int(a.as.i OP b.as.i);                  \
+        if (a.tag == T_STR && b.tag == T_STR) {               \
+            int c = strcmp(a.as.s, b.as.s);                   \
+            rt_drop(&a);                                      \
+            rt_drop(&b);                                      \
+            return rt_int(c OP 0);                            \
+        }                                                     \
         rt_panic("cannot compare these types");               \
         return rt_int(0);                                     \
     }
@@ -187,5 +208,46 @@ Value rt_close(Value f) {
     if (f.tag != T_FILE) rt_panic("close() needs a file");
     if (f.borrowed) rt_panic("cannot close a borrowed file");
     rt_drop(&f);
+    return rt_int(0);
+}
+
+Value rt_len(Value s) {
+    if (s.tag != T_STR) rt_panic("len() needs a string");
+    long n = (long)strlen(s.as.s);
+    rt_drop(&s);
+    return rt_int(n);
+}
+
+Value rt_trim(Value s) {
+    if (s.tag != T_STR) rt_panic("trim() needs a string");
+    const char *start = s.as.s;
+    while (*start && isspace((unsigned char)*start)) start++;
+    const char *end = s.as.s + strlen(s.as.s);
+    while (end > start && isspace((unsigned char)end[-1])) end--;
+    size_t n = (size_t)(end - start);
+    char *buf = malloc(n + 1);
+    if (!buf) rt_panic("out of memory");
+    memcpy(buf, start, n);
+    buf[n] = '\0';
+    rt_drop(&s);
+    Value v;
+    v.tag = T_STR;
+    v.borrowed = 0;
+    v.as.s = buf;
+    return v;
+}
+
+Value rt_tostr(Value x) {
+    if (x.tag == T_INT) {
+        char tmp[32];
+        snprintf(tmp, sizeof tmp, "%ld", x.as.i);
+        return rt_str(tmp);
+    }
+    if (x.tag == T_STR) {
+        Value out = rt_str(x.as.s);
+        rt_drop(&x);
+        return out;
+    }
+    rt_panic("tostr() needs an int or a string");
     return rt_int(0);
 }
