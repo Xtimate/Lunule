@@ -9,14 +9,14 @@ class Token:
     line: int
     col: int
 
-KEYWORDS = {"let", "print", "if", "else", "while", "fn", "return"}
+KEYWORDS = {"let", "print", "if", "else", "while", "fn", "return", "for", "in"}
 
 TOKEN_SPEC = [
     ("COMMENT",  r"#[^\n]*"),
     ("STR",      r'"(?:[^"\\\n]|\\.)*"'),
     ("NUM",      r"\d+"),
     ("ID",       r"[A-Za-z_]\w*"),
-    ("OP",       r"==|!=|<=|>=|[+\-*/=()<>{},&]"),
+    ("OP",       r"==|!=|<=|>=|[+\-*/=()<>{},&\[\]]"),
     ("NEWLINE",  r"\n"),
     ("SKIP",     r"[ \t\r]+"),
     ("MISMATCH", r"."),
