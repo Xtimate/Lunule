@@ -1,5 +1,5 @@
 from errors import LangError
-from nodes import Num, Str, Var, BinOp, Let, Assign, Print, If, While, Call, FuncDef, Return, ExprStmt, Borrow
+from nodes import Num, Str, Var, BinOp, Let, Assign, Print, If, While, Call, FuncDef, Return, ExprStmt, Borrow, ListLit, Index, IndexAssign, For
 
 RT_FUNCS = {
     "+": "rt_add", "-": "rt_sub", "*": "rt_mul", "/": "rt_div",
@@ -7,7 +7,7 @@ RT_FUNCS = {
     "==": "rt_eq", "!=": "rt_ne",
 }
 
-BUILTINS = {"open": 2, "read": 1, "write": 2, "close": 1, "len": 1, "trim": 1, "tostr": 1}
+BUILTINS = {"open": 2, "read": 1, "write": 2, "close": 1, "len": 1, "trim": 1, "tostr": 1, "push": 2}
 
 C_ESC = {"\\": "\\\\", '"': '\\"', "\n": "\\n", "\t": "\\t"}
 
@@ -80,6 +80,13 @@ class CodeGen:
                     )
                 arg_list = ", ".join(self.arg_code(a) for a in args)
                 return f"{target}({arg_list})"
+            case ListLit(items=items):
+                if not items:
+                    return "rt_list_lit(0, NULL)"
+                elems = ", ".join(self.value_of(i) for i in items)
+                return f"rt_list_lit({len(items)}, (Value[]){{{elems}}})"
+            case Index(index=index):
+                return f"rt_index({self.borrow(node)}, {self.operand(index)})"
             case _:
                 raise AssertionError(f"unknown expression node {node}")
 
@@ -136,6 +143,34 @@ class CodeGen:
                 self.emit("}")
             case FuncDef(line=line, col=col):
                 raise LangError("functions can only be defined at the top level", line, col)
+            case IndexAssign(index=index, value=value):
+                self.emit(f"rt_list_set({self.borrow(node)}, {self.operand(index)}, {self.value_of(value)});")
+            case For(var=var, iter=iter_, body=body):
+                uid = self.counter
+                self.counter += 1;
+                it, idx = f"it_{uid}", f"i_{uid}"
+                src = self.borrow(iter_) if isinstance(iter_, Var) else self.expr(iter_)
+                self.emit("{")
+                self.indent += 1
+                self.emit(f"Value {it} = {src};")
+                self.scopes.append({"names": {}, "owned": [it]})
+                self.emit(f"for (long {idx} = 0; {idx} < rt_list_len(&{it}; {idx}++) {{")
+                self.scopes.append({"names": {}, "owned": []})
+                self.indent += 1
+                cname = self.declare(var)
+                self.emit(f"Value {cname} = rt_list_get(&{it}, {idx});")
+                for s in body:
+                    self.stmt(s)
+                inner = self.scopes.pop()
+                for c in reversed(inner["owned"]):
+                    self.emit(f"rt_drop(&{c});")
+                self.indent -= 1
+                self.emit("}")
+                outer = self.scopes.pop()
+                for c in reversed(outer["owned"]):
+                    self.emit(f"rt_drop(&{c});")
+                self.indent -= 1
+                self.emit("}")
             case _:
                 raise AssertionError(f"unknown statement node {node}")
 
