@@ -1,5 +1,5 @@
 from errors import LangError
-from nodes import Num, Str, Var, BinOp, Let, Assign, Print, If, While, Call, FuncDef, Return, ExprStmt, Borrow, ListLit, Index, IndexAssign, For, Spawn
+from nodes import Num, Str, Var, BinOp, Let, Assign, Print, If, While, Call, FuncDef, Return, ExprStmt, Borrow, ListLit, Index, IndexAssign, For, Spawn, Break, Continue
 
 RT_FUNCS = {
     "+": "rt_add", "-": "rt_sub", "*": "rt_mul", "/": "rt_div",
@@ -22,6 +22,7 @@ class CodeGen:
         self.counter = 0
         self.funcs = {}
         self.in_function = False
+        self.loops = []
 
     def emit(self, text):
         self.lines.append("    " * self.indent + text)
@@ -57,6 +58,25 @@ class CodeGen:
     def value_of(self, node):
         return self.move(node) if isinstance(node, Var) else self.expr(node)
 
+    def ordered(self, nodes, parts, make):
+        if sum(1 for n in nodes if not isinstance(n, (Num, Str))) < 2:
+            return make(parts)
+        names, decls = [], []
+        for p in parts:
+            name = f"o_{self.counter}"
+            self.counter += 1
+            names.append(name)
+            decls.append(f"Value {name} = {p};")
+        return "({ " + " ".join(decls) + " " + make(names) + "; })"
+
+    def loop_exit(self, kind, node):
+        if not self.loops:
+            raise LangError(f"'{kind}' outside of a loop", node.line, node.col)
+        for scope in reversed(self.scopes[self.loops[-1]:]):
+            for cname in reversed(scope["owned"]):
+                self.emit(f"rt_drop(&{cname});")
+        self.emit(f"{kind};")
+
     def expr(self, node):
         match node:
             case Num(value=v):
@@ -66,7 +86,8 @@ class CodeGen:
             case Var():
                 return self.use(node)
             case BinOp(op=op, left=left, right=right):
-                return f"{RT_FUNCS[op]}({self.operand(left)}, {self.operand(right)})"
+                fn = RT_FUNCS[op]
+                return self.ordered([left, right], [self.operand(left), self.operand(right)], lambda n: f"{fn}({n[0]}, {n[1]})")
             case Call(name=name, args=args, line=line, col=col):
                 if name in self.funcs:
                     target, n = f"f_{name}", self.funcs[name]
@@ -78,13 +99,13 @@ class CodeGen:
                     raise LangError(
                         f"function '{name}' takes {n} argument(s) but {len(args)} given", line, col
                     )
-                arg_list = ", ".join(self.arg_code(a) for a in args)
-                return f"{target}({arg_list})"
+                parts = [self.arg_code(a) for a in args]
+                return self.ordered(args, parts, lambda n: f"{target}({', '.join(n)})")
             case ListLit(items=items):
                 if not items:
                     return "rt_list_lit(0, NULL)"
-                elems = ", ".join(self.value_of(i) for i in items)
-                return f"rt_list_lit({len(items)}, (Value[]){{{elems}}})"
+                parts = [self.value_of(i) for i in items]
+                return self.ordered(items, parts, lambda n: f"rt_list_lit({len(n)}, (Value[]){{{', '.join(n)}}})")
             case Index(index=index):
                 return f"rt_index({self.borrow(node)}, {self.operand(index)})"
             case _:
@@ -124,7 +145,9 @@ class CodeGen:
                 self.emit("}")
             case While(cond=cond, body=body):
                 self.emit(f"while (rt_truthy({self.expr(cond)})) {{")
+                self.loops.append(len(self.scopes))
                 self.body(body)
+                self.loops.pop()
                 self.emit("}")
             case ExprStmt(value=value):
                 self.emit(f"{{ Value t = {self.expr(value)}; rt_drop(&t); }}")
@@ -155,6 +178,7 @@ class CodeGen:
                 self.emit(f"Value {it} = {src};")
                 self.scopes.append({"names": {}, "owned": [it]})
                 self.emit(f"for (long {idx} = 0; {idx} < rt_list_len(&{it}); {idx}++) {{")
+                self.loops.append(len(self.scopes))
                 self.scopes.append({"names": {}, "owned": []})
                 self.indent += 1
                 cname = self.declare(var)
@@ -162,6 +186,7 @@ class CodeGen:
                 for s in body:
                     self.stmt(s)
                 inner = self.scopes.pop()
+                self.loops.pop()
                 for c in reversed(inner["owned"]):
                     self.emit(f"rt_drop(&{c});")
                 self.indent -= 1
@@ -183,18 +208,23 @@ class CodeGen:
                     if isinstance(a, Borrow):
                         raise LangError("can't lend a value to a thread; move it in (use share() for channels)",
                             a.line, a.col)
-                arg_list = ", ".join(self.value_of(a) for a in args)
                 if args:
-                    self.emit(f"rt_spawn(spawn_f_{name}, {len(args)}, (Value[]){{{arg_list}}});")
+                    parts = [self.value_of(a) for a in args]
+                    self.emit(self.ordered(args, parts, lambda n: f"rt_spawn(spawn_f_{name}, {len(n)}, (Value[]){{{', '.join(n)}}})") + ";")
                 else:
                     self.emit(f"rt_spawn(spawn_f_{name}, 0, NULL);")
+            case Break():
+                self.loop_exit("break", node)
+            case Continue():
+                self.loop_exit("continue", node)
             case _:
                 raise AssertionError(f"unknown statement node {node}")
 
     def function(self, fn):
-        saved_lines, saved_scopes = self.lines, self.scopes
+        saved_lines, saved_scopes, saved_loops = self.lines, self.scopes, self.loops
         self.lines = []
         self.scopes = [{"names": {}, "owned": []}]
+        self.loops = []
         self.in_function = True
         params = [self.declare(p) for p in fn.params]
         self.indent = 1
@@ -208,7 +238,7 @@ class CodeGen:
         param_list = ", ".join(f"Value {p}" for p in params) or "void"
         sig = f"Value f_{fn.name}({param_list})"
         text = sig + " {\n" + "\n".join(self.lines) + "\n}\n"
-        self.lines, self.scopes = saved_lines, saved_scopes
+        self.lines, self.scopes, self.loops = saved_lines, saved_scopes, saved_loops
         self.in_function = False
         return sig, text
 

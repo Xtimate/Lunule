@@ -9,7 +9,7 @@ class Token:
     line: int
     col: int
 
-KEYWORDS = {"let", "print", "if", "else", "while", "fn", "return", "for", "in", "spawn"}
+KEYWORDS = {"let", "print", "if", "else", "while", "fn", "return", "for", "in", "spawn", "break", "continue"}
 
 TOKEN_SPEC = [
     ("COMMENT",  r"#[^\n]*"),

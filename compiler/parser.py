@@ -1,5 +1,5 @@
 from errors import LangError
-from nodes import Num, Str, Var, BinOp, Let, Assign, Print, If, While, Call, FuncDef, Return, ExprStmt, Borrow, ListLit, Index, IndexAssign, For, Spawn
+from nodes import Num, Str, Var, BinOp, Let, Assign, Print, If, While, Call, FuncDef, Return, ExprStmt, Borrow, ListLit, Index, IndexAssign, For, Spawn, Break, Continue
 
 CMP_OPS = ("<", ">", "<=", ">=", "==", "!=")
 ESCAPES = {"n": "\n", "t": "\t", "\\": "\\", '"': '"'}
@@ -121,6 +121,12 @@ class Parser:
                 if self.peek().kind != "(":
                     raise LangError("spawn needs a function call, like: spawn worker(args)", tok.line, tok.col)
                 return Spawn(name.text, self.args(), name.line, name.col)
+            case "break":
+                self.advance()
+                return Break(tok.line, tok.col)
+            case "continue":
+                self.advance()
+                return Continue(tok.line, tok.col)
             case _:
                 raise LangError(f"expected a statement but found {describe(tok)}", tok.line, tok.col)
 

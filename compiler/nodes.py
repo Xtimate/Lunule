@@ -114,3 +114,13 @@ class Spawn:
     args: list
     line: int
     col: int
+
+@dataclass
+class Break:
+    line: int
+    col: int
+
+@dataclass
+class Continue:
+    line: int
+    col: int

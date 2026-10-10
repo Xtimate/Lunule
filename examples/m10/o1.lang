@@ -1,0 +1,4 @@
+let ch = channel()
+send(&ch, 10)
+send(&ch, 3)
+print(recv(&ch) - recv(&ch))
