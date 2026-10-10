@@ -1,5 +1,5 @@
 from errors import LangError
-from nodes import Num, Str, Var, BinOp, Let, Assign, Print, If, While, Call, FuncDef, Return, ExprStmt, Borrow
+from nodes import Num, Str, Var, BinOp, Let, Assign, Print, If, While, Call, FuncDef, Return, ExprStmt, Borrow, ListLit, Index, IndexAssign, For
 
 CMP_OPS = ("<", ">", "<=", ">=", "==", "!=")
 ESCAPES = {"n": "\n", "t": "\t", "\\": "\\", '"': '"'}
@@ -81,6 +81,12 @@ class Parser:
                 if self.peek().kind == "(":
                     call = Call(name.text, self.args(), name.line, name.col)
                     return ExprStmt(call)
+                if self.peek().kind == "[":
+                    self.advance()
+                    index = self.expr()
+                    self.expect("]")
+                    self.expect("=")
+                    return IndexAssign(name.text, index, self.expr(), name.line, name.col)
                 self.expect("=")
                 return Assign(name.text, self.expr(), name.line, name.col)
             case "print":
@@ -103,6 +109,12 @@ class Parser:
                 if self.peek().kind not in ("NEWLINE", "EOF", "}"):
                     value = self.expr()
                 return Return(value, tok.line, tok.col)
+            case "for":
+                self.advance()
+                var = self.expect("ID")
+                self.expect("in")
+                iterable = self.expr()
+                return For(var.text, iterable, self.block(), tok.line, tok.col)
             case _:
                 raise LangError(f"expected a statement but found {describe(tok)}", tok.line, tok.col)
 
@@ -190,6 +202,11 @@ class Parser:
                 self.advance()
                 if self.peek().kind == "(":
                     return Call(tok.text, self.args(), tok.line, tok.col)
+                if self.peek().kind == "[":
+                    self.advance()
+                    index = self.expr()
+                    self.expect("]")
+                    return Index(tok.text, index, tok.line, tok.col)
                 return Var(tok.text, tok.line, tok.col)
             case "(":
                 self.advance()
@@ -199,5 +216,15 @@ class Parser:
             case "&":
                 raise LangError("a borrow '&' can only be passed directly as a function argument",
                                 tok.line, tok.col)
+            case "[":
+                self.advance()
+                items = []
+                if self.peek().kind != "]":
+                    items.append(self.expr())
+                    while self.peek().kind == ",":
+                        self.advance()
+                        items.append(self.expr())
+                self.expect("]")
+                return ListLit(items, tok.line, tok.col)
             case _:
                 raise LangError(f"expected a value but found {describe(tok)}", tok.line, tok.col)
