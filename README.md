@@ -1,4 +1,4 @@
-# LANGNAME
+# Lunule
 
 Lunule is a programming language I made from scratch for Hack Club Crescent. It compilesto native code, has no garbage collector, and you never have to write `free`. It also can't have data races, which is the par i'm most proud of.
 
