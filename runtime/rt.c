@@ -5,7 +5,9 @@
 #include <ctype.h>
 #include "rt.h"
 
-static int owns_heap(Tag t) { return t == T_STR || t == T_FILE; }
+static int owns_heap(Tag t) { return t == T_STR || t == T_FILE || t == T_LIST; }
+static void list_free(List *l);
+static void print_inner(const Value *v);
 
 void rt_panic(const char *msg) {
     fprintf(stderr, "runtime error: %s\n", msg);
@@ -37,13 +39,11 @@ Value rt_str(const char *s) {
     return v;
 }
 
-/* Borrow: read the value without taking ownership. */
 Value rt_use(const Value *v, const char *name) {
     if (v->tag == T_MOVED) panic_moved(name);
     return *v;
 }
 
-/* Move: take ownership. Strings leave the source dead; ints are copied. */
 Value rt_move(Value *v, const char *name) {
     if (v->tag == T_MOVED) panic_moved(name);
     if (owns_heap(v->tag) && v->borrowed) {
@@ -62,11 +62,11 @@ Value rt_borrow(const Value *v, const char *name) {
     return out;
 }
 
-/* Free what the value owns, and mark it dead so a second drop does nothing. */
 void rt_drop(Value *v) {
     if (!v->borrowed) {
         if (v->tag == T_STR)        free(v->as.s);
         else if (v->tag == T_FILE)  fclose(v->as.f);
+        else if (v->tag == T_LIST)  list_free(v->as.l);
     }
     v->tag = T_MOVED;
 }
@@ -133,17 +133,18 @@ CMP_FN(rt_ge, >=)
 CMP_FN(rt_eq, ==)
 CMP_FN(rt_ne, !=)
 
-    int rt_truthy(Value v) {
-        if (v.tag == T_INT) return v.as.i != 0;
-        rt_panic("condition must be an int");
-        return 0;
-    }
+int rt_truthy(Value v) {
+    if (v.tag == T_INT) return v.as.i != 0;
+    rt_panic("condition must be an int");
+    return 0;
+}
 
 void rt_print(Value v) {
     switch (v.tag) {
         case T_INT:   printf("%ld\n", v.as.i); break;
         case T_STR:   printf("%s\n", v.as.s); break;
         case T_FILE:  printf("<file>\n"); break;
+        case T_LIST:  print_inner(&v); printf("\n"); break;
         case T_MOVED: rt_panic("print of a dead value"); break;
     }
 }
@@ -212,8 +213,10 @@ Value rt_close(Value f) {
 }
 
 Value rt_len(Value s) {
-    if (s.tag != T_STR) rt_panic("len() needs a string");
-    long n = (long)strlen(s.as.s);
+    long n = 0;
+    if (s.tag == T_STR) n = (long)strlen(s.as.s);
+    else if (s.tag == T_LIST) n = s.as.l->len;
+    else rt_panic("len() needs a string or a list");
     rt_drop(&s);
     return rt_int(n);
 }
@@ -250,4 +253,123 @@ Value rt_tostr(Value x) {
     }
     rt_panic("tostr() needs an int or a string");
     return rt_int(0);
+}
+
+static void list_free(List *l) {
+    for (long i = 0; i < l->len; i++) rt_drop(&l->items[i]);
+    free(l->items);
+    free(l);
+}
+
+static void print_inner(const Value *v) {
+    switch(v->tag) {
+        case T_INT: printf("%ld", v->as.i); break;
+        case T_STR: printf("\"%s\"", v->as.s); break;
+        case T_FILE: printf("<file>"); break;
+        case T_MOVED: printf("<moved>"); break;
+        case T_LIST:
+            printf("[");
+            for (long i = 0; i < v->as.l->len; i++) {
+                if (i) printf(", ");
+                print_inner(&v->as.l->items[i]);
+            }
+            printf("]");
+            break;
+    }
+}
+
+static List *list_new(long cap) {
+    List *l = malloc(sizeof *l);
+    if (!l) rt_panic("out of memory");
+    l->len = 0;
+    l->cap = cap < 4 ? 4 : cap;
+    l->items = malloc(sizeof(Value) * (size_t)l->cap);
+    if (!l->items) rt_panic("out of memory");
+    return l;
+}
+
+static Value to_elem(Value x) {
+    if (x.tag == T_INT) return x;
+    if (x.tag == T_STR) {
+        Value c = rt_str(x.as.s);
+        rt_drop(&x);
+        return c;
+    }
+    rt_panic("lists can only hold ints and strings");
+    return x;
+}
+
+static Value copy_elem(const Value *e) {
+    if (e->tag == T_INT) return rt_int(e->as.i);
+    return rt_str(e->as.s);
+}
+
+static List *need_list(const Value *v, const char *what) {
+    if (v->tag != T_LIST) {
+        fprintf(stderr, "runtime error: %s needs a list\n", what);
+        exit(1);
+    }
+    return v->as.l;
+}
+
+static long need_index(const List *l, Value idx) {
+    if (idx.tag != T_INT) rt_panic("list index must be an int");
+    long i = idx.as.i;
+    if (i < 0 || i >= l->len) {
+        fprintf(stderr, "runtime error: index %ld out of range (length %ld)\n", i, l->len);
+        exit(1);
+    }
+    return i;
+}
+
+Value rt_list_lit(long n, const Value *items) {
+    List *l = list_new(n);
+    for (long i = 0; i < n; i++) l->items[l->len++] = to_elem(items[i]);
+    Value v;
+    v.tag = T_LIST;
+    v.borrowed = 0;
+    v.as.l = l;
+    return v;
+}
+
+Value rt_index(Value list, Value idx) {
+    List *l = need_list(&list, "indexing");
+    long i = need_index(l, idx);
+    Value out = copy_elem(&l->items[i]);
+    rt_drop(&list);
+    rt_drop(&idx);
+    return out;
+}
+
+Value rt_list_set(Value list, Value idx, Value x) {
+    List *l = need_list(&list, "index assignment");
+    long i = need_index(l, idx);
+    Value elem = to_elem(x);
+    rt_drop(&l->items[i]);
+    l->items[i] = elem;
+    rt_drop(&list);
+    return rt_int(0);
+}
+
+Value rt_push(Value list, Value x) {
+    List *l = need_list(&list, "push()");
+    Value elem = to_elem(x);
+    if (l->len == l->cap) {
+        long ncap = l->cap * 2;
+        Value *bigger = realloc(l->items, sizeof(Value) * (size_t)ncap);
+        if (!bigger) rt_panic("out of memory");
+        l->items = bigger;
+        l->cap = ncap;
+    }
+    l->items[l->len++] = elem;
+    rt_drop(&list);
+    return rt_int(0);
+}
+
+long rt_list_len(const Value *list) {
+    return need_list(list, "for")->len;
+}
+
+Value rt_list_get(const Value *list, long i) {
+    return copy_elem(&need_list(list, "for")->items[i]);
 }

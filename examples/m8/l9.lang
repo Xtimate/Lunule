@@ -1,0 +1,5 @@
+let xs = ["a"]
+let s = xs[0]
+xs[0] = "z"
+print(s)
+print(xs)

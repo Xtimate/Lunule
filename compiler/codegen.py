@@ -154,7 +154,7 @@ class CodeGen:
                 self.indent += 1
                 self.emit(f"Value {it} = {src};")
                 self.scopes.append({"names": {}, "owned": [it]})
-                self.emit(f"for (long {idx} = 0; {idx} < rt_list_len(&{it}; {idx}++) {{")
+                self.emit(f"for (long {idx} = 0; {idx} < rt_list_len(&{it}); {idx}++) {{")
                 self.scopes.append({"names": {}, "owned": []})
                 self.indent += 1
                 cname = self.declare(var)
