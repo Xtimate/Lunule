@@ -1,0 +1,3 @@
+print("a" == "a")
+print("b" == "a")
+print("a" < "b")

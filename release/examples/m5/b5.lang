@@ -1,0 +1,9 @@
+fn inner(x) {
+    print(x)
+}
+fn outer(x) {
+    inner(&x)
+}
+let s = "deep"
+outer(&s)
+print(s)

@@ -1,0 +1,10 @@
+fn show(x) {
+    print(x)
+}
+fn eat(x) {
+    print(x)
+}
+let s = "z"
+show(&s)
+eat(s)
+print(s)

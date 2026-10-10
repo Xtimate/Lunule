@@ -1,0 +1,13 @@
+fn make(n) {
+    let s = "temp"
+    if n > 0 {
+        return s
+    }
+    return "other"
+}
+let i = 0
+while i < 3 {
+    let r = make(i)
+    print(r)
+    i = i + 1
+}

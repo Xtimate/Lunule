@@ -1,0 +1,9 @@
+let n = 0
+while 1 {
+    let s = "tmp"
+    n = n + 1
+    if n > 2 {
+        break
+    }
+}
+print(n)

@@ -1,0 +1,11 @@
+let xs = [
+    1,
+    2,
+    3,
+]
+print(xs)
+let ys = ["a", "b",]
+print(ys)
+let zs = [
+]
+print(len(&zs))

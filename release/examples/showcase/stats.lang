@@ -1,0 +1,55 @@
+# stats.lang: parallel file stats
+#
+# Four worker threads each read one file, measure it and make a small report
+# file and signal completion over a channel. Main collects results
+
+fn write_text(path, text) {
+    let f = open(&path, "w")
+    write(&f, &text)
+    close(f)
+}
+
+fn analyze(id, path, done) {
+    let f = open(&path, "r")
+    let text = read(f)
+    let raw = len(&text)
+    let trimmed = len(trim(&text))
+    let line = path + ": raw=" + tostr(raw) + " trimmed=" + tostr(trimmed) + "\n"
+    write_text("build/stats_" + tostr(id) + ".txt", line)
+    send(&done, raw)
+}
+
+write_text("build/in_0.txt", "  hello world  \n")
+write_text("build/in_1.txt", "tidy\n")
+write_text("build/in_2.txt", "\n\n   lots of   padding   \n\n\n")
+write_text("build/in_3.txt", "x")
+
+let paths = ["build/in_0.txt", "build/in_1.txt", "build/in_2.txt", "build/in_3.txt"]
+let done = channel()
+
+let id = 0
+for p in paths {
+    spawn analyze(id, p, share(&done))
+    id = id + 1
+}
+
+let total = 0
+let k = 0
+while k < len(&paths) {
+    total = total + recv(&done)
+    k = k + 1
+}
+
+let report = ""
+let i = 0
+while i < len(&paths) {
+    let f = open("build/stats_" + tostr(i) + ".txt", "r")
+    report = report + read(f)
+    i = i + 1
+}
+write_text("build/report.txt", report)
+
+let rf = open("build/report.txt", "r")
+let text = read(rf)
+print(trim(&text))
+print("total bytes: " + tostr(total))

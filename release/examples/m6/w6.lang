@@ -1,0 +1,1 @@
+let f = open("build/does-not-exist.txt", "r")

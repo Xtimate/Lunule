@@ -1,0 +1,5 @@
+let ch = channel()
+send(&ch, 1)
+send(&ch, 2)
+let xs = [recv(&ch), recv(&ch)]
+print(xs)

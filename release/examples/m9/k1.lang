@@ -1,0 +1,6 @@
+fn worker(ch) {
+    send(&ch, "hello from thread")
+}
+let ch = channel()
+spawn worker(share(&ch))
+print(recv(&ch))

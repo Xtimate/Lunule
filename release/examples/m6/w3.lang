@@ -1,0 +1,9 @@
+fn log(f, msg) {
+    write(&f, &msg)
+}
+let f = open("build/log.txt", "w")
+log(&f, "first\n")
+log(&f, "second\n")
+close(f)
+let g = open("build/log.txt", "r")
+print(read(g))
