@@ -1,13 +1,23 @@
 #include "rt.h"
 
+Value f_five(void);
+Value spawn_f_five(Value *a);
+
+Value f_five(void) {
+    {
+        Value ret = rt_int(5);
+        return ret;
+    }
+    return rt_int(0);
+}
+
+Value spawn_f_five(Value *a) {
+    (void)a;
+    return f_five();
+}
+
 int main(void) {
-    Value v_ch_0 = rt_channel();
-    { Value t = rt_send(rt_borrow(&v_ch_0, "ch"), rt_int(1)); rt_drop(&t); }
-    { Value t = rt_send(rt_borrow(&v_ch_0, "ch"), rt_int(2)); rt_drop(&t); }
-    Value v_xs_3 = ({ Value o_1 = rt_recv(rt_borrow(&v_ch_0, "ch")); Value o_2 = rt_recv(rt_borrow(&v_ch_0, "ch")); rt_list_lit(2, (Value[]){o_1, o_2}); });
-    rt_print(rt_use(&v_xs_3, "xs"));
-    rt_drop(&v_xs_3);
-    rt_drop(&v_ch_0);
+    { Value t = f_five(); rt_print(t); rt_drop(&t); }
     rt_join_all();
     return 0;
 }

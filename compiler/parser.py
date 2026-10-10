@@ -67,6 +67,9 @@ class Parser:
         self.expect("}")
         return stmts
 
+    def skip_newlines(self):
+        while self.peek().kind == "NEWLINE":
+            self.advance()
 
     def statement(self):
         tok = self.peek()
@@ -166,8 +169,8 @@ class Parser:
             if p.text in seen:
                 raise LangError(f"duplicate parameter '{p.text}'", p.line, p.col)
             seen.add(p.text)
-            body = self.block()
-            return FuncDef(name.text, [p.text for p in params], body, name.line, name.col)
+        body = self.block()
+        return FuncDef(name.text, [p.text for p in params], body, name.line, name.col)
 
     def args(self):
         self.expect("(")
@@ -230,12 +233,18 @@ class Parser:
                                 tok.line, tok.col)
             case "[":
                 self.advance()
+                self.skip_newlines()
                 items = []
                 if self.peek().kind != "]":
                     items.append(self.expr())
+                    self.skip_newlines()
                     while self.peek().kind == ",":
                         self.advance()
+                        self.skip_newlines()
+                        if self.peek().kind == "]":
+                            break
                         items.append(self.expr())
+                        self.skip_newlines()
                 self.expect("]")
                 return ListLit(items, tok.line, tok.col)
             case _:

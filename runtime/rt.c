@@ -133,8 +133,28 @@ CMP_FN(rt_lt, <)
 CMP_FN(rt_gt, >)
 CMP_FN(rt_le, <=)
 CMP_FN(rt_ge, >=)
-CMP_FN(rt_eq, ==)
-CMP_FN(rt_ne, !=)
+
+static int values_equal(const Value *a, const Value *b) {
+    if (a->tag == T_INT && b->tag == T_INT) return a->as.i == b->as.i;
+    if (a->tag == T_STR && b->tag == T_STR) return strcmp(a->as.s, b->as.s) == 0;
+    if (a->tag != b->tag) return 0;
+    rt_panic("cannot compare these values");
+    return 0;
+}
+
+Value rt_eq(Value a, Value b) {
+    int r = values_equal(&a, &b);
+    rt_drop(&a);
+    rt_drop(&b);
+    return rt_int(r);
+}
+
+Value rt_ne(Value a, Value b) {
+    int r = values_equal(&a, &b);
+    rt_drop(&a);
+    rt_drop(&b);
+    return rt_int(!r);
+}
 
 int rt_truthy(Value v) {
     if (v.tag == T_INT) return v.as.i != 0;
