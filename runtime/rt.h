@@ -3,14 +3,15 @@
 
 #include <stdio.h>
 
-typedef enum { T_INT, T_STR, T_FILE, T_MOVED, T_LIST } Tag;
+typedef enum { T_INT, T_STR, T_FILE, T_LIST, T_CHAN, T_MOVED } Tag;
 
 typedef struct List List;
+typedef struct Chan Chan;
 
 typedef struct {
     Tag tag;
     int borrowed;
-    union { long i; char *s; FILE *f; List *l; } as;
+    union { long i; char *s; FILE *f; List *l; Chan *c; } as;
 } Value;
 
 struct List {
@@ -47,6 +48,12 @@ Value rt_list_set(Value list, Value idx, Value x);
 Value rt_push(Value list, Value x);
 long rt_list_len(const Value *list);
 Value rt_list_get(const Value *list, long i);
+Value rt_channel(void);
+Value rt_share(Value ch);
+Value rt_send(Value ch, Value x);
+Value rt_recv(Value ch);
+void rt_spawn(Value (*fn)(Value *), int n, const Value *args);
+void rt_join_all(void);
 int   rt_truthy(Value v);
 void  rt_print(Value v);
 void  rt_panic(const char *msg);

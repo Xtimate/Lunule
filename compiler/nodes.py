@@ -107,3 +107,10 @@ class For:
     body: list
     line: int
     col: int
+
+@dataclass
+class Spawn:
+    name: str
+    args: list
+    line: int
+    col: int

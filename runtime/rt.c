@@ -3,9 +3,11 @@
 #include <string.h>
 #include <errno.h>
 #include <ctype.h>
+#include <pthread.h>
 #include "rt.h"
 
-static int owns_heap(Tag t) { return t == T_STR || t == T_FILE || t == T_LIST; }
+static int owns_heap(Tag t) { return t == T_STR || t == T_FILE || t == T_LIST || t == T_CHAN; }
+static void chan_release(Chan *c);
 static void list_free(List *l);
 static void print_inner(const Value *v);
 
@@ -67,6 +69,7 @@ void rt_drop(Value *v) {
         if (v->tag == T_STR)        free(v->as.s);
         else if (v->tag == T_FILE)  fclose(v->as.f);
         else if (v->tag == T_LIST)  list_free(v->as.l);
+        else if (v->tag == T_CHAN)  chan_release(v->as.c);
     }
     v->tag = T_MOVED;
 }
@@ -145,6 +148,7 @@ void rt_print(Value v) {
         case T_STR:   printf("%s\n", v.as.s); break;
         case T_FILE:  printf("<file>\n"); break;
         case T_LIST:  print_inner(&v); printf("\n"); break;
+        case T_CHAN:  printf("<channel>\n"); break;
         case T_MOVED: rt_panic("print of a dead value"); break;
     }
 }
@@ -267,6 +271,7 @@ static void print_inner(const Value *v) {
         case T_STR: printf("\"%s\"", v->as.s); break;
         case T_FILE: printf("<file>"); break;
         case T_MOVED: printf("<moved>"); break;
+        case T_CHAN: printf("<channel>"); break;
         case T_LIST:
             printf("[");
             for (long i = 0; i < v->as.l->len; i++) {
@@ -372,4 +377,176 @@ long rt_list_len(const Value *list) {
 
 Value rt_list_get(const Value *list, long i) {
     return copy_elem(&need_list(list, "for")->items[i]);
+}
+
+struct Chan {
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    Value *buf;
+    long head, len, cap;
+    int refs;
+};
+
+static void chan_release(Chan *c) {
+    pthread_mutex_lock(&c->mu);
+    int left = --c->refs;
+    pthread_cond_broadcast(&c->cv);
+    pthread_mutex_unlock(&c->mu);
+    if (left == 0) {
+        for (long i = 0; i < c->len; i++) rt_drop(&c->buf[(c->head + i) % c->cap]);
+        free(c->buf);
+        pthread_mutex_destroy(&c->mu);
+        pthread_cond_destroy(&c->cv);
+        free(c);
+    }
+}
+
+static Chan *need_chan(const Value *v, const char *what) {
+    if (v->tag != T_CHAN) {
+        fprintf(stderr, "runtime error: %s needs a channel\n", what);
+        exit(1);
+    }
+    return v->as.c;
+}
+
+static Value chan_value(Chan *c) {
+    Value v;
+    v.tag = T_CHAN;
+    v.borrowed = 0;
+    v.as.c = c;
+    return v;
+}
+
+Value rt_channel(void) {
+    Chan *c = malloc(sizeof *c);
+    if (!c) rt_panic("out of memory");
+    pthread_mutex_init(&c->mu, NULL);
+    pthread_cond_init(&c->cv, NULL);
+    c->cap = 8;
+    c->buf = malloc(sizeof(Value) * (size_t)c->cap);
+    if (!c->buf) rt_panic("out of memory");
+    c->head = 0;
+    c->len = 0;
+    c->refs = 1;
+    return chan_value(c);
+}
+
+Value rt_share(Value ch) {
+    Chan *c = need_chan(&ch, "share()");
+    pthread_mutex_lock(&c->mu);
+    c->refs++;
+    pthread_mutex_unlock(&c->mu);
+    rt_drop(&ch);
+    return chan_value(c);
+}
+
+static Value msg_take(Value x) {
+    switch (x.tag) {
+        case T_INT:
+            return x;
+        case T_STR:
+            if (x.borrowed) return rt_str(x.as.s);
+            return x;
+        case T_FILE:
+        case T_LIST:
+        case T_CHAN:
+            if (x.borrowed) rt_panic("cannot send a borrowed value; move it into send() instead");
+            return x;
+        default:
+            rt_panic("cannot send a dead value");
+    }
+    return x;
+}
+
+Value rt_send(Value ch, Value x) {
+    Chan *c = need_chan(&ch, "send()");
+    Value m = msg_take(x);
+    pthread_mutex_lock(&c->mu);
+    if (c->len == c->cap) {
+        long ncap = c->cap * 2;
+        Value *nb = malloc(sizeof(Value) * (size_t)ncap);
+        if (!nb) rt_panic("out of memory");
+        for (long i = 0; i < c->len; i++) nb[i] = c->buf[(c->head + i) % c->cap];
+        free(c->buf);
+        c->buf = nb;
+        c->head = 0;
+        c->cap = ncap;
+    }
+    c->buf[(c->head + c->len) % c->cap] = m;
+    c->len++;
+    pthread_cond_signal(&c->cv);
+    pthread_mutex_unlock(&c->mu);
+    rt_drop(&ch);
+    return rt_int(0);
+}
+
+Value rt_recv(Value ch) {
+    Chan *c = need_chan(&ch, "recv()");
+    pthread_mutex_lock(&c->mu);
+    while (c->len == 0) {
+        if (c->refs <= 1) {
+            pthread_mutex_unlock(&c->mu);
+            rt_panic("recv() on an empty channel with no senders left (it would wait forever)");
+        }
+        pthread_cond_wait(&c->cv, &c->mu);
+    }
+    Value m = c->buf[c->head];
+    c->head = (c->head + 1) % c->cap;
+    c->len--;
+    pthread_mutex_unlock(&c->mu);
+    rt_drop(&ch);
+    return m;
+}
+
+typedef struct {
+    Value (*fn)(Value *);
+    Value *args;
+} SpawnArgs;
+
+static pthread_mutex_t threads_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_t *threads = NULL;
+static long nthreads = 0, thread_cap = 0;
+
+static void *thread_main(void *p) {
+    SpawnArgs *sa = p;
+    Value r = sa->fn(sa->args);
+    rt_drop(&r);
+    free(sa->args);
+    free(sa);
+    return NULL;
+}
+
+void rt_spawn(Value (*fn)(Value *), int n, const Value *args) {
+    SpawnArgs *sa = malloc(sizeof *sa);
+    if (!sa) rt_panic("out of memory");
+    sa->fn = fn;
+    sa->args = malloc(sizeof(Value) * (size_t)(n > 0 ? n : 1));
+    if (!sa->args) rt_panic("out of memory");
+    for (int i = 0; i < n; i++) sa->args[i] = args[i];
+    pthread_t t;
+    if (pthread_create(&t, NULL, thread_main, sa) != 0) rt_panic("could not start a thread");
+    pthread_mutex_lock(&threads_mu);
+    if (nthreads == thread_cap) {
+        thread_cap = thread_cap ? thread_cap * 2 : 8;
+        threads = realloc(threads, sizeof(pthread_t) * (size_t)thread_cap);
+        if (!threads) rt_panic("out of memory");
+    }
+    threads[nthreads++] = t;
+    pthread_mutex_unlock(&threads_mu);
+}
+
+void rt_join_all(void) {
+    for (;;) {
+        pthread_mutex_lock(&threads_mu);
+        if (nthreads == 0) {
+            pthread_mutex_unlock(&threads_mu);
+            break;
+        }
+        pthread_t t = threads[--nthreads];
+        pthread_mutex_unlock(&threads_mu);
+        pthread_join(t, NULL);
+    }
+    free(threads);
+    threads = NULL;
+    thread_cap = 0;
 }

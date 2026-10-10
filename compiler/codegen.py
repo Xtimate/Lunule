@@ -1,5 +1,5 @@
 from errors import LangError
-from nodes import Num, Str, Var, BinOp, Let, Assign, Print, If, While, Call, FuncDef, Return, ExprStmt, Borrow, ListLit, Index, IndexAssign, For
+from nodes import Num, Str, Var, BinOp, Let, Assign, Print, If, While, Call, FuncDef, Return, ExprStmt, Borrow, ListLit, Index, IndexAssign, For, Spawn
 
 RT_FUNCS = {
     "+": "rt_add", "-": "rt_sub", "*": "rt_mul", "/": "rt_div",
@@ -7,7 +7,7 @@ RT_FUNCS = {
     "==": "rt_eq", "!=": "rt_ne",
 }
 
-BUILTINS = {"open": 2, "read": 1, "write": 2, "close": 1, "len": 1, "trim": 1, "tostr": 1, "push": 2}
+BUILTINS = {"open": 2, "read": 1, "write": 2, "close": 1, "len": 1, "trim": 1, "tostr": 1, "push": 2, "channel": 0, "share": 1, "send": 2, "recv": 1}
 
 C_ESC = {"\\": "\\\\", '"': '\\"', "\n": "\\n", "\t": "\\t"}
 
@@ -171,6 +171,23 @@ class CodeGen:
                     self.emit(f"rt_drop(&{c});")
                 self.indent -= 1
                 self.emit("}")
+            case Spawn(name=name, args=args, line=line, col=col):
+                if name not in self.funcs:
+                    raise LangError(f"'{name}' is not a function you defined; spawn needs one of your own functions", line, col)
+                n = self.funcs[name]
+                if len(args) != n:
+                    raise LangError(
+                        f"function '{name}' take {n} argument(s) but {len(args)} given", line, col
+                    )
+                for a in args:
+                    if isinstance(a, Borrow):
+                        raise LangError("can't lend a value to a thread; move it in (use share() for channels)",
+                            a.line, a.col)
+                arg_list = ", ".join(self.value_of(a) for a in args)
+                if args:
+                    self.emit(f"rt_spawn(spawn_f_{name}, {len(args)}, (Value[]){{{arg_list}}});")
+                else:
+                    self.emit(f"rt_spawn(spawn_f_{name}, 0, NULL);")
             case _:
                 raise AssertionError(f"unknown statement node {node}")
 
@@ -212,8 +229,13 @@ def generate(program):
         sig, text = gen.function(fn)
         protos.append(sig + ";")
         defs.append(text)
+        call_args = ", ".join(f"a[{i}]" for i in range(len(fn.params)))
+        wsig = f"Value spawn_f_{fn.name}(Value *a)"
+        protos.append(wsig + ";")
+        defs.append(wsig + " {\n    (void)a;\n    return f_" + fn.name + "(" + call_args + ");\n}\n")
 
     gen.body(rest)
+    gen.lines.append("    rt_join_all();")
     body = "\n".join(gen.lines)
 
     out = '#include "rt.h"\n\n'

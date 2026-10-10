@@ -1,0 +1,19 @@
+fn summer(inbox, outbox) {
+    let total = 0
+    let n = recv(&inbox)
+    while n >= 0 {
+        total = total + n
+        n = recv(&inbox)
+    }
+    send(&outbox, total)
+}
+let inbox = channel()
+let outbox = channel()
+spawn summer(share(&inbox), share(&outbox))
+let i = 1
+while i <= 5 {
+    send(&inbox, i)
+    i = i + 1
+}
+send(&inbox, 0 - 1)
+print(recv(&outbox))
