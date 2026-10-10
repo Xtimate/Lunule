@@ -1,0 +1,1 @@
+build/in_0.txt: raw=16 trimmed=11

@@ -1,0 +1,1 @@
+build/in_1.txt: raw=5 trimmed=4

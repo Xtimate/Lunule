@@ -1,0 +1,4 @@
+build/in_0.txt: raw=16 trimmed=11
+build/in_1.txt: raw=5 trimmed=4
+build/in_2.txt: raw=28 trimmed=17
+build/in_3.txt: raw=1 trimmed=1
