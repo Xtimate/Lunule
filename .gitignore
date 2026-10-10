@@ -1,2 +1,3 @@
 compiler/__pycache__/
 *.spec
+tests/

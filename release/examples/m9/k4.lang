@@ -1,5 +1,0 @@
-fn f(x) {
-    print(x)
-}
-let s = "a"
-spawn f(&s)

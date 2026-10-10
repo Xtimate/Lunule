@@ -1,7 +1,0 @@
-fn sub(a, b) {
-    return a - b
-}
-let ch = channel()
-send(&ch, 10)
-send(&ch, 3)
-print(sub(recv(&ch), recv(&ch)))

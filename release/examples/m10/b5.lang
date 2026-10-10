@@ -1,7 +1,0 @@
-for w in ["a", "b", "c"] {
-    let up = w + "!"
-    if w == "b" {
-        break
-    }
-    print(up)
-}

@@ -1,6 +1,0 @@
-fn shout(s) {
-    return s
-}
-let a = "yo"
-let b = shout(a)
-print(b)

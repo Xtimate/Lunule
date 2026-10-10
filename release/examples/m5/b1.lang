@@ -1,6 +1,0 @@
-fn greet(n) {
-    print(n)
-}
-let s = "hi"
-greet(&s)
-print(s)

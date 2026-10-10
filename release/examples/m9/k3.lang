@@ -1,8 +1,0 @@
-fn shout(ch, s) {
-    send(&ch, s + "!")
-}
-let ch = channel()
-let word = "hey"
-spawn shout(share(&ch), word)
-print(recv(&ch))
-print(word)

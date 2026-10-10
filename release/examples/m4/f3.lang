@@ -1,4 +1,0 @@
-print(double(4))
-fn double(x) {
-    return x * 2
-}

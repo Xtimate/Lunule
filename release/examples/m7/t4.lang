@@ -1,3 +1,0 @@
-let s = "  hi \n"
-print(trim(&s))
-print(len(&s))

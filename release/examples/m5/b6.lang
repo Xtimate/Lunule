@@ -1,9 +1,0 @@
-fn show(x) {
-    print(x)
-}
-let s = "loop"
-let i = 0
-while i < 3 {
-    show(&s)
-    i = i + 1
-}

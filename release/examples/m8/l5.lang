@@ -1,5 +1,0 @@
-let names = ["ann", "bob"]
-for n in names {
-    print("hi " + n)
-}
-print(names)

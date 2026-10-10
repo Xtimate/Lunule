@@ -1,3 +1,0 @@
-let f = open("build/x.txt", "w")
-close(f)
-write(&f, "late")

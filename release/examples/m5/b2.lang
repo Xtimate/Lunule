@@ -1,5 +1,0 @@
-fn keep(x) {
-    return x
-}
-let s = "a"
-let t = keep(&s)

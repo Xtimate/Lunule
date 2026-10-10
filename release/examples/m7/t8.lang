@@ -1,3 +1,0 @@
-let c = "x"
-let d = len(c)
-print(c)

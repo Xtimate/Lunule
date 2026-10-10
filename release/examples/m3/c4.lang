@@ -1,4 +1,0 @@
-if 1 {
-    let y = 5
-}
-print(y)

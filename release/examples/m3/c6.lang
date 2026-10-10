@@ -1,6 +1,0 @@
-let s = "x"
-let n = 0
-while n < 2 {
-    let t = s
-    n = n + 1
-}

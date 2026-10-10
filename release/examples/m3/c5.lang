@@ -1,6 +1,0 @@
-let n = 0
-while n < 3 {
-    let s = "hi"
-    print(s)
-    n = n + 1
-}

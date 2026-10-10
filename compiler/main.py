@@ -32,12 +32,12 @@ def main():
     if "-o" in args:
         i = args.index("-o")
         if i + 1 >= len(args):
-            print("usage langc <file.lang> [-o output]", file=sys.stderr)
+            print("usage lunule <file.lun> [-o output]", file=sys.stderr)
             sys.exit(2)
         out = args[i + 1]
         del args[i:i + 2]
     if len(args) != 1:
-        print("usage langc <file.lang> [-o output]", file=sys.stderr)
+        print("usage lunule <file.lun> [-o output]", file=sys.stderr)
         sys.exit(2)
 
     path = args[0]

@@ -1,3 +1,0 @@
-let a = "hello"
-let b = a
-print(b)

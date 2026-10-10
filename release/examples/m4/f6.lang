@@ -1,4 +1,0 @@
-fn f(a) {
-    return a
-}
-print(f(1, 2))

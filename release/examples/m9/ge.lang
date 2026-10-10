@@ -1,3 +1,0 @@
-print(5 >= 0)
-print(0 >= 0)
-print(0 >= 1)

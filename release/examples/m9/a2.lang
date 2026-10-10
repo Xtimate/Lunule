@@ -1,5 +1,0 @@
-let ch = channel()
-send(&ch, 5)
-let n = 1
-n = recv(&ch)
-print(n)

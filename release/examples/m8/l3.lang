@@ -1,5 +1,0 @@
-let xs = []
-push(&xs, "a")
-push(&xs, "b")
-print(xs)
-print(len(&xs))

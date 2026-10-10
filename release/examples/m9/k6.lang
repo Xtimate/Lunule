@@ -1,2 +1,0 @@
-let ch = channel()
-print(recv(&ch))

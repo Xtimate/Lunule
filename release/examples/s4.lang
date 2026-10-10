@@ -1,4 +1,0 @@
-let s = "one"
-let s = "two"
-print(s)
-print("temp")

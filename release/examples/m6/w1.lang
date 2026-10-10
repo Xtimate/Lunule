@@ -1,6 +1,0 @@
-let f = open("build/hello.txt", "w")
-write(&f, "hello from lang\n")
-close(f)
-let g = open("build/hello.txt", "r")
-let text = read(g)
-print(text)

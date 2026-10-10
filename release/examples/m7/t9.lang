@@ -1,7 +1,0 @@
-let n = 0
-let acc = ""
-while n < 3 {
-    acc = acc + tostr(n)
-    n = n + 1
-}
-print(acc)
