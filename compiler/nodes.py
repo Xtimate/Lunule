@@ -78,3 +78,32 @@ class Borrow:
     name: str
     line: int
     col: int
+
+@dataclass
+class ListLit:
+    items: list
+    line: int
+    col: int
+
+@dataclass
+class Index:
+    name: str
+    index: object
+    line: int
+    col: int
+
+@dataclass
+class IndexAssign:
+    name: str
+    index: object
+    value: object
+    line: int
+    col: int
+
+@dataclass
+class For:
+    var: str
+    iter: object
+    body: list
+    line: int
+    col: int
