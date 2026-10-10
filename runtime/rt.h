@@ -3,13 +3,20 @@
 
 #include <stdio.h>
 
-typedef enum { T_INT, T_STR, T_FILE, T_MOVED } Tag;
+typedef enum { T_INT, T_STR, T_FILE, T_MOVED, T_LIST } Tag;
+
+typedef struct List List;
 
 typedef struct {
     Tag tag;
     int borrowed;
-    union { long i; char *s; FILE *f; } as;
+    union { long i; char *s; FILE *f; List *l; } as;
 } Value;
+
+struct List {
+    Value *items;
+    long len, cap;
+};
 
 Value rt_int(long n);
 Value rt_str(const char *s);
@@ -34,6 +41,12 @@ Value rt_close(Value f);
 Value rt_len(Value s);
 Value rt_trim(Value s);
 Value rt_tostr(Value x);
+Value rt_list_lit(long n, const Value *items);
+Value rt_index(Value list, Value idx);
+Value rt_list_set(Value list, Value idx, Value x);
+Value rt_push(Value list, Value x);
+Value rt_list_len(const Value *list);
+Value rt_list_get(const Value *list, long i);
 int   rt_truthy(Value v);
 void  rt_print(Value v);
 void  rt_panic(const char *msg);
