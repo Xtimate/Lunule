@@ -1,1 +1,0 @@
-build/in_2.txt: raw=28 trimmed=17
